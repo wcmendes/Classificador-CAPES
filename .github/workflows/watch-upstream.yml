@@ -1,0 +1,508 @@
+# .github/workflows/watch-upstream.yml
+# Job mensal: verifica ETag/Last-Modified de fontes e documentos normativos.
+# Abre PR para fontes livres alteradas, issues para fontes restritas e docs normativos.
+# Requirements: 9.1-9.5
+
+name: Monitorar Versões Upstream
+
+on:
+  schedule:
+    # Mensal: dia 1 de cada mês às 07:00 UTC
+    - cron: "0 7 1 * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+env:
+  PYTHON_VERSION: "3.11"
+  HTTP_TIMEOUT: 30
+  # Arquivo de estado com indicadores de versão da última execução
+  STATE_FILE: ".github/watch-upstream-state.json"
+
+jobs:
+  watch-upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Instalar dependências
+        run: |
+          pip install --upgrade pip
+          pip install pyyaml requests
+
+      - name: Verificar indicadores de versão upstream
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python - <<'EOF'
+          import yaml, json, os, sys, hashlib
+          from datetime import datetime, timezone
+          import requests
+
+          HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", 30))
+          STATE_FILE = os.environ.get("STATE_FILE", ".github/watch-upstream-state.json")
+
+          # --- Carregar estado anterior ---
+          prev_state = {}
+          if os.path.exists(STATE_FILE):
+              with open(STATE_FILE) as f:
+                  prev_state = json.load(f)
+
+          # --- Carregar fontes de sources.yml ---
+          with open("sources.yml") as f:
+              sources_data = yaml.safe_load(f)
+
+          fontes = sources_data.get("fontes", [])
+
+          # --- Carregar documentos normativos das áreas ---
+          normativos = []
+          areas_dir = "areas"
+          if os.path.exists(areas_dir):
+              for fname in os.listdir(areas_dir):
+                  if fname.endswith(".json"):
+                      with open(os.path.join(areas_dir, fname)) as f:
+                          area_data = json.load(f)
+                      area_code = area_data.get("area", "?")
+                      area_nome = area_data.get("nome", fname)
+                      fonte_oficial = area_data.get("fonte_oficial", {})
+                      landing = fonte_oficial.get("landing_url", "")
+                      docs = fonte_oficial.get("documentos", [])
+                      for doc in docs:
+                          normativos.append({
+                              "id": f"doc-area{area_code:02d}-{doc.get('papel', 'doc')}",
+                              "titulo": doc.get("titulo", ""),
+                              "area_code": area_code,
+                              "area_nome": area_nome,
+                              "url": landing,  # URL da página de área
+                          })
+
+          # --- Verificar cada fonte ---
+          now = datetime.now(timezone.utc).isoformat()
+          new_state = {}
+          changes_livre = []
+          changes_restrita = []
+          changes_normativo = []
+          errors = []
+
+          def check_url(url, item_id):
+              """Verifica ETag/Last-Modified de uma URL. Retorna dict com indicadores."""
+              if not url:
+                  return None, "URL vazia"
+              try:
+                  resp = requests.head(url, timeout=HTTP_TIMEOUT, allow_redirects=True)
+                  resp.raise_for_status()
+                  return {
+                      "etag": resp.headers.get("ETag"),
+                      "last_modified": resp.headers.get("Last-Modified"),
+                      "status_code": resp.status_code,
+                      "checked_at": now,
+                  }, None
+              except requests.Timeout:
+                  return None, f"Timeout ({HTTP_TIMEOUT}s)"
+              except requests.RequestException as e:
+                  return None, str(e)[:200]
+
+          def has_changed(current, previous):
+              """Compara indicadores de versão."""
+              if not current or not previous:
+                  return False
+              if current.get("etag") and previous.get("etag"):
+                  return current["etag"] != previous["etag"]
+              if current.get("last_modified") and previous.get("last_modified"):
+                  return current["last_modified"] != previous["last_modified"]
+              return False
+
+          print("=== Verificando fontes ===\n")
+
+          for fonte in fontes:
+              source_id = fonte["id"]
+              url = fonte.get("landing_url", "")
+              licenca = fonte.get("licenca", "")
+              state_key = f"fonte:{source_id}"
+
+              indicators, error = check_url(url, source_id)
+
+              if error:
+                  print(f"  ✗ {source_id}: {error}")
+                  # Registrar falha; verificar persistência (Req 9.5)
+                  prev = prev_state.get(state_key, {})
+                  consecutive_failures = prev.get("consecutive_failures", 0) + 1
+                  new_state[state_key] = {
+                      **prev,
+                      "consecutive_failures": consecutive_failures,
+                      "last_error": error,
+                      "last_error_at": now,
+                  }
+                  errors.append({
+                      "id": source_id,
+                      "url": url,
+                      "error": error,
+                      "consecutive_failures": consecutive_failures,
+                  })
+                  continue
+
+              # Atualizar estado
+              prev = prev_state.get(state_key, {})
+              new_state[state_key] = {
+                  **indicators,
+                  "consecutive_failures": 0,
+              }
+
+              if has_changed(indicators, prev):
+                  print(f"  ⚡ {source_id}: ALTERAÇÃO DETECTADA")
+                  change_info = {
+                      "id": source_id,
+                      "nome": fonte.get("nome", source_id),
+                      "url": url,
+                      "prev_etag": prev.get("etag"),
+                      "new_etag": indicators.get("etag"),
+                      "prev_last_modified": prev.get("last_modified"),
+                      "new_last_modified": indicators.get("last_modified"),
+                      "detected_at": now,
+                  }
+                  if licenca == "livre":
+                      changes_livre.append(change_info)
+                  else:
+                      changes_restrita.append(change_info)
+              else:
+                  print(f"  ✓ {source_id}: sem alteração")
+
+          print("\n=== Verificando documentos normativos ===\n")
+
+          for doc in normativos:
+              doc_id = doc["id"]
+              url = doc.get("url", "")
+              state_key = f"normativo:{doc_id}"
+
+              indicators, error = check_url(url, doc_id)
+
+              if error:
+                  print(f"  ✗ {doc_id}: {error}")
+                  prev = prev_state.get(state_key, {})
+                  consecutive_failures = prev.get("consecutive_failures", 0) + 1
+                  new_state[state_key] = {
+                      **prev,
+                      "consecutive_failures": consecutive_failures,
+                      "last_error": error,
+                      "last_error_at": now,
+                  }
+                  errors.append({
+                      "id": doc_id,
+                      "url": url,
+                      "error": error,
+                      "consecutive_failures": consecutive_failures,
+                  })
+                  continue
+
+              prev = prev_state.get(state_key, {})
+              new_state[state_key] = {
+                  **indicators,
+                  "consecutive_failures": 0,
+              }
+
+              if has_changed(indicators, prev):
+                  print(f"  ⚡ {doc_id}: ALTERAÇÃO DETECTADA")
+                  changes_normativo.append({
+                      "id": doc_id,
+                      "titulo": doc.get("titulo", ""),
+                      "url": url,
+                      "area_code": doc.get("area_code"),
+                      "area_nome": doc.get("area_nome"),
+                      "prev_etag": prev.get("etag"),
+                      "new_etag": indicators.get("etag"),
+                      "prev_last_modified": prev.get("last_modified"),
+                      "new_last_modified": indicators.get("last_modified"),
+                      "detected_at": now,
+                  })
+              else:
+                  print(f"  ✓ {doc_id}: sem alteração")
+
+          # --- Salvar novo estado ---
+          os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+          with open(STATE_FILE, "w") as f:
+              json.dump(new_state, f, indent=2)
+
+          # --- Salvar resultados para steps seguintes ---
+          os.makedirs("data/watch", exist_ok=True)
+          results = {
+              "changes_livre": changes_livre,
+              "changes_restrita": changes_restrita,
+              "changes_normativo": changes_normativo,
+              "errors": errors,
+              "timestamp": now,
+          }
+          with open("data/watch/_results.json", "w") as f:
+              json.dump(results, f, indent=2)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as gh:
+              gh.write(f"has_livre={'true' if changes_livre else 'false'}\n")
+              gh.write(f"has_restrita={'true' if changes_restrita else 'false'}\n")
+              gh.write(f"has_normativo={'true' if changes_normativo else 'false'}\n")
+              gh.write(f"has_persistent_errors={'true' if any(e['consecutive_failures'] >= 2 for e in errors) else 'false'}\n")
+
+          print(f"\n=== Resumo ===")
+          print(f"Fontes livres alteradas: {len(changes_livre)}")
+          print(f"Fontes restritas alteradas: {len(changes_restrita)}")
+          print(f"Docs normativos alterados: {len(changes_normativo)}")
+          print(f"Erros de acesso: {len(errors)}")
+          print(f"Erros persistentes (≥2 meses): {sum(1 for e in errors if e['consecutive_failures'] >= 2)}")
+          EOF
+
+      - name: "PR: Fonte livre alterada (Req 9.2)"
+        if: steps.check.outputs.has_livre == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python - <<'EOF'
+          import json, os, subprocess
+
+          with open("data/watch/_results.json") as f:
+              results = json.load(f)
+
+          for change in results["changes_livre"]:
+              source_id = change["id"]
+              nome = change["nome"]
+              detected = change["detected_at"][:10]
+
+              body = f"""## Alteração Detectada em Fonte Livre
+
+          **Fonte:** {nome} (`{source_id}`)
+          **URL monitorada:** {change['url']}
+          **Data de detecção:** {detected}
+
+          ### Indicadores Alterados
+
+          | Indicador | Valor Anterior | Valor Novo |
+          |-----------|---------------|------------|
+          | ETag | `{change.get('prev_etag', 'N/A')}` | `{change.get('new_etag', 'N/A')}` |
+          | Last-Modified | `{change.get('prev_last_modified', 'N/A')}` | `{change.get('new_last_modified', 'N/A')}` |
+
+          ### Ação
+          Os dados atualizados devem ser baixados e normalizados para gerar novo diff.
+
+          ---
+          *Detectado automaticamente por `watch-upstream.yml`*
+          """
+
+              # Salvar body para PR
+              body_file = f"data/watch/_pr_body_{source_id}.md"
+              with open(body_file, "w") as f:
+                  f.write(body)
+
+              print(f"PR body gerado para {source_id}")
+          EOF
+
+      - name: Criar PR para fontes livres alteradas
+        if: steps.check.outputs.has_livre == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(watch): atualizar estado de monitoramento upstream"
+          branch: ci/watch-upstream-update
+          delete-branch: true
+          title: "[Watch] Fonte livre alterada — atualização disponível"
+          body: |
+            ## Fonte(s) Livre(s) com Nova Versão Detectada
+
+            O job `watch-upstream` detectou alteração nos indicadores de versão (ETag/Last-Modified)
+            de uma ou mais fontes livres. Verificar logs do workflow para detalhes.
+
+            Execute o workflow `update-sources` para baixar e processar as atualizações.
+
+            ---
+            *Gerado automaticamente por `watch-upstream.yml`*
+          labels: |
+            dados
+            upstream-change
+          add-paths: |
+            .github/watch-upstream-state.json
+
+      - name: "Issue: Fonte restrita alterada — acao-manual (Req 9.3)"
+        if: steps.check.outputs.has_restrita == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python - <<'EOF'
+          import json, os, subprocess
+
+          with open("data/watch/_results.json") as f:
+              results = json.load(f)
+
+          for change in results["changes_restrita"]:
+              source_id = change["id"]
+              nome = change["nome"]
+              detected = change["detected_at"][:10]
+
+              title = f"[Ação Manual] Fonte restrita alterada: {nome} ({detected})"
+              body = f"""## Alteração Detectada em Fonte Restrita
+
+          **Fonte:** {nome} (`{source_id}`)
+          **URL monitorada:** {change['url']}
+          **Data de detecção:** {detected}
+
+          ### Indicadores Alterados
+
+          | Indicador | Valor Anterior | Valor Novo |
+          |-----------|---------------|------------|
+          | ETag | `{change.get('prev_etag', 'N/A')}` | `{change.get('new_etag', 'N/A')}` |
+          | Last-Modified | `{change.get('prev_last_modified', 'N/A')}` | `{change.get('new_last_modified', 'N/A')}` |
+
+          ### Ação Requerida
+          1. Baixar manualmente a nova versão de: {change['url']}
+          2. Atualizar `config/local.yml` com o caminho do novo arquivo
+          3. Executar: `python -m pipeline onboard add {source_id}`
+
+          ---
+          *Detectado automaticamente por `watch-upstream.yml`*
+          """
+
+              subprocess.run([
+                  "gh", "issue", "create",
+                  "--title", title,
+                  "--body", body,
+                  "--label", "acao-manual",
+              ], check=True)
+
+              print(f"Issue criada para fonte restrita: {source_id}")
+          EOF
+
+      - name: "Issue: Documento normativo alterado — severidade-alta (Req 9.4)"
+        if: steps.check.outputs.has_normativo == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python - <<'EOF'
+          import json, os, subprocess
+
+          with open("data/watch/_results.json") as f:
+              results = json.load(f)
+
+          for change in results["changes_normativo"]:
+              doc_id = change["id"]
+              titulo = change["titulo"]
+              area_nome = change.get("area_nome", "Desconhecida")
+              area_code = change.get("area_code", "?")
+              detected = change["detected_at"][:10]
+
+              title = f"[SEVERIDADE ALTA] Documento normativo alterado: Área {area_code:02d} ({detected})"
+              body = f"""## ⚠️ Alteração em Documento Normativo
+
+          **Documento:** {titulo}
+          **Identificador:** `{doc_id}`
+          **URL monitorada:** {change['url']}
+          **Data de detecção:** {detected}
+
+          ### Indicadores Alterados
+
+          | Indicador | Valor Anterior | Valor Novo |
+          |-----------|---------------|------------|
+          | ETag | `{change.get('prev_etag', 'N/A')}` | `{change.get('new_etag', 'N/A')}` |
+          | Last-Modified | `{change.get('prev_last_modified', 'N/A')}` | `{change.get('new_last_modified', 'N/A')}` |
+
+          ### Áreas Potencialmente Afetadas
+          - **Área {area_code:02d}** — {area_nome}
+
+          ### Impacto
+          Documentos normativos definem as regras de classificação. Uma alteração pode
+          invalidar regras em `areas/area{area_code:02d}-*.json`.
+
+          ### Ação Requerida
+          1. Baixar e revisar o documento atualizado
+          2. Comparar com a versão anterior
+          3. Atualizar regras em `areas/` se necessário
+          4. Regenerar snapshots afetados
+
+          ---
+          *Detectado automaticamente por `watch-upstream.yml`*
+          """
+
+              subprocess.run([
+                  "gh", "issue", "create",
+                  "--title", title,
+                  "--body", body,
+                  "--label", "severidade-alta",
+              ], check=True)
+
+              print(f"Issue criada para documento normativo: {doc_id}")
+          EOF
+
+      - name: "Issue: Fonte inacessível há 2+ meses (Req 9.5)"
+        if: steps.check.outputs.has_persistent_errors == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python - <<'EOF'
+          import json, os, subprocess
+
+          with open("data/watch/_results.json") as f:
+              results = json.load(f)
+
+          persistent_errors = [e for e in results["errors"] if e["consecutive_failures"] >= 2]
+
+          for error in persistent_errors:
+              source_id = error["id"]
+              url = error["url"]
+              failures = error["consecutive_failures"]
+              err_msg = error["error"]
+
+              title = f"[Fonte Inacessível] {source_id} — {failures} falhas consecutivas"
+              body = f"""## Fonte Inacessível por Período Prolongado
+
+          **Fonte/Documento:** `{source_id}`
+          **URL monitorada:** {url}
+          **Falhas consecutivas:** {failures} (≥ 2 meses)
+          **Último erro:** {err_msg}
+
+          ### Contexto
+          Esta URL retornou erro em {failures} verificações mensais consecutivas.
+          Conforme Requisito 9.5, uma issue é aberta quando a falha persiste por 2+ meses.
+
+          ### Ações Possíveis
+          - Verificar se a URL mudou (redirect não seguido, domínio alterado)
+          - Atualizar `landing_url` em `sources.yml` se a fonte migrou
+          - Marcar como `bloqueada` se a fonte foi descontinuada
+
+          ---
+          *Detectado automaticamente por `watch-upstream.yml`*
+          """
+
+              subprocess.run([
+                  "gh", "issue", "create",
+                  "--title", title,
+                  "--body", body,
+                  "--label", "fonte-inacessivel",
+              ], check=True)
+
+              print(f"Issue criada para fonte inacessível: {source_id}")
+          EOF
+
+      - name: Commit estado atualizado
+        uses: peter-evans/create-pull-request@v6
+        if: always()
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(watch): atualizar estado de monitoramento"
+          branch: ci/watch-upstream-state
+          delete-branch: true
+          title: "[Watch] Atualizar estado de monitoramento upstream"
+          body: |
+            Atualização automática do arquivo de estado do monitoramento upstream.
+            Este PR persiste os indicadores de versão (ETag/Last-Modified) para
+            comparação na próxima execução mensal.
+          labels: |
+            ci-pipeline
+            automerge
+          add-paths: |
+            .github/watch-upstream-state.json

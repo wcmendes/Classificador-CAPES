@@ -1,0 +1,13 @@
+{
+  "manifest_version": 2,
+  "name": "NoQualis - Classificador CAPES",
+  "version": "0.1.0",
+  "description": "Classifica itens do Zotero segundo critérios CAPES do ciclo 2025-2028",
+  "applications": {
+    "zotero": {
+      "id": "noqualis@wcmendes.github.io",
+      "update_url": "https://raw.githubusercontent.com/wcmendes/NoQualis_Zotero/main/updates.json",
+      "strict_min_version": "7.0"
+    }
+  }
+}

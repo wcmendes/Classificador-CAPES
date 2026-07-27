@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/classificador-capes/schema/area.schema.json",
+  "title": "Regras de classificação de produção bibliográfica por Área de Avaliação CAPES",
+  "description": "Descreve, de forma declarativa e auditável, como uma Área de Avaliação da CAPES classifica artigos no ciclo 2025-2028. O motor interpreta este arquivo; nenhuma regra vive em código.",
+  "type": "object",
+  "required": [
+    "area", "nome", "vigencia", "procedimento", "status",
+    "fonte_oficial", "data_extracao", "escala", "veiculos"
+  ],
+  "additionalProperties": false,
+
+  "properties": {
+    "area": {
+      "type": "integer",
+      "description": "Código numérico da Área de Avaliação CAPES.",
+      "minimum": 1
+    },
+    "nome": { "type": "string" },
+    "vigencia": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{4}$",
+      "description": "Quadriênio de vigência destas regras."
+    },
+    "procedimento": {
+      "description": "Procedimento(s) de classificação adotados pela área, conforme Documento Referencial da CAPES. 1 = indicadores do veículo; 2 = indicadores do artigo; 3 = análise qualitativa. Pode ser combinação.",
+      "type": "array",
+      "items": { "type": "integer", "enum": [1, 2, 3] },
+      "minItems": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["validada", "experimental", "nao_automatizavel"],
+      "description": "validada = conferida contra a ficha oficial por revisor humano; experimental = derivada mas não conferida; nao_automatizavel = a área exige julgamento que o motor não reproduz."
+    },
+    "fonte_oficial": {
+      "type": "object",
+      "required": ["landing_url"],
+      "additionalProperties": false,
+      "properties": {
+        "landing_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Página-hub da área no gov.br. Estável mesmo quando o PDF é republicado; é ESTA url que o job watch-upstream monitora."
+        },
+        "documentos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["titulo", "papel"],
+            "additionalProperties": false,
+            "properties": {
+              "titulo": { "type": "string" },
+              "url": { "type": "string", "format": "uri" },
+              "arquivo_local": { "type": "string" },
+              "papel": {
+                "type": "string",
+                "enum": ["algoritmo", "pesos", "anexos", "referencial", "complementar"],
+                "description": "algoritmo = documento de onde saem os limiares de classificação."
+              }
+            }
+          }
+        }
+      }
+    },
+    "data_extracao": {
+      "type": "string",
+      "format": "date",
+      "description": "Quando um humano leu o documento oficial e transcreveu estas regras."
+    },
+    "revisor": { "type": "string" },
+
+    "escala": {
+      "type": "object",
+      "required": ["rotulos"],
+      "additionalProperties": false,
+      "properties": {
+        "rotulos": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 2,
+          "description": "Do melhor para o pior. A ordem define o que significa '+1 nível' nos ajustes."
+        },
+        "pontos": {
+          "type": "object",
+          "additionalProperties": { "type": "number" },
+          "description": "Peso de cada rótulo no cálculo de produção. Rótulo com peso 0 não pontua — informação de alto valor prático para o usuário."
+        },
+        "formula_producao": {
+          "type": "string",
+          "description": "Fórmula literal transcrita da ficha, para exibição. Não é executada."
+        }
+      }
+    },
+
+    "veiculos": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Um bloco de regras por tipo de item do Zotero.",
+      "additionalProperties": false,
+      "properties": {
+        "journalArticle": { "$ref": "#/$defs/blocoVeiculo" },
+        "conferencePaper": { "$ref": "#/$defs/blocoVeiculo" },
+        "book": { "$ref": "#/$defs/blocoVeiculo" },
+        "bookSection": { "$ref": "#/$defs/blocoVeiculo" }
+      }
+    },
+
+    "nao_automatizavel": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Critérios da ficha que o motor NÃO reproduz. Exibidos ao usuário junto do veredito. Lista vazia é suspeita: quase toda área tem algum julgamento humano."
+    },
+
+    "notas": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Observações do revisor, incluindo pontos marcados como INCERTO."
+    }
+  },
+
+  "$defs": {
+    "blocoVeiculo": {
+      "type": "object",
+      "required": ["combinacao", "regras"],
+      "additionalProperties": false,
+      "properties": {
+        "combinacao": {
+          "type": "string",
+          "enum": ["melhor_posicao", "metrica_unica", "primeira_regra"],
+          "description": "melhor_posicao = avalia todas as regras e fica com o melhor resultado (Área 27). metrica_unica = uma métrica contínua determina o estrato (Computação). primeira_regra = ordem importa, para no primeiro match."
+        },
+        "metrica": {
+          "type": "string",
+          "description": "Para combinacao=metrica_unica. Nome da métrica ou expressão max()/min() sobre nomes de métrica. NUNCA um id de fonte."
+        },
+        "regras": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/regra" }
+        },
+        "ajustes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ajuste" },
+          "description": "Aplicados na ordem declarada, após a classificação base."
+        },
+        "teto_qualitativo": {
+          "type": "string",
+          "description": "Nenhum ajuste marcado como qualitativo pode elevar o item acima deste rótulo."
+        },
+        "fallback": {
+          "type": "string",
+          "enum": ["NAO_CLASSIFICAVEL", "NAO_CONSIDERADO", "pior_rotulo"],
+          "description": "NAO_CLASSIFICAVEL = faltam dados. NAO_CONSIDERADO = a área explicitamente descarta este item. Jamais inferir um estrato aproximado."
+        }
+      }
+    },
+
+    "regra": {
+      "type": "object",
+      "required": ["resultado"],
+      "additionalProperties": false,
+      "properties": {
+        "metrica": {
+          "type": "string",
+          "description": "Nome canônico da métrica (ex: sjr_quartil, abs_rating, wos_percentil, h5_index). Resolvido via campo 'provides' das fontes em sources.yml."
+        },
+        "in": {
+          "type": "array",
+          "items": { "type": ["string", "number"] },
+          "description": "Pertencimento a categoria discreta."
+        },
+        "min": { "type": "number", "description": "Corte inferior inclusivo." },
+        "max": { "type": "number", "description": "Corte superior exclusivo." },
+        "requer": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Condições adicionais que devem ser todas verdadeiras (ex: indexado_scielo_br)."
+        },
+        "resultado": { "type": "string" },
+        "nota": { "type": "string" }
+      }
+    },
+
+    "ajuste": {
+      "type": "object",
+      "required": ["se"],
+      "additionalProperties": false,
+      "properties": {
+        "se": {
+          "type": "string",
+          "description": "Condição booleana nomeada, resolvida por uma métrica de fonte."
+        },
+        "efeito": {
+          "type": "string",
+          "pattern": "^[+-][0-9]+$",
+          "description": "Deslocamento em níveis na escala. Use 'resultado' em vez de 'efeito' para atribuição direta."
+        },
+        "resultado": {
+          "type": "string",
+          "description": "Atribui um rótulo fixo, ignorando a classificação base."
+        },
+        "teto": {
+          "type": "string",
+          "description": "Rótulo máximo que este ajuste específico pode atingir."
+        },
+        "qualitativo": {
+          "type": "boolean",
+          "default": false,
+          "description": "Se true, sujeito a teto_qualitativo do bloco."
+        },
+        "nota": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "noqualis-zotero-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NoQualis - Classificador CAPES para Zotero 7",
+  "author": "wcmendes",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wcmendes/NoQualis_Zotero"
+  },
+  "scripts": {
+    "build": "echo 'No build step required for Zotero 7 bootstrap plugins'",
+    "lint": "eslint src/",
+    "test": "echo 'Plugin tests run in Zotero environment'"
+  },
+  "devDependencies": {},
+  "engines": {
+    "zotero": ">=7.0"
+  }
+}

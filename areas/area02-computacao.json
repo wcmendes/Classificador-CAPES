@@ -1,0 +1,140 @@
+{
+  "$schema": "../schema/area.schema.json",
+
+  "area": 2,
+  "nome": "Computação",
+  "vigencia": "2025-2028",
+  "procedimento": [1, 2, 3],
+  "status": "experimental",
+
+  "fonte_oficial": {
+    "landing_url": "https://www.gov.br/capes/pt-br/acesso-a-informacao/acoes-e-programas/avaliacao/sobre-a-avaliacao/areas-avaliacao/sobre-as-areas-de-avaliacao/colegio-de-ciencias-exatas-tecnologicas-e-multidisciplinar/ciencias-exatas-e-da-terra/ciencia-da-computacao",
+    "documentos": [
+      {
+        "titulo": "Documento de Área - Computação (Área 02), 2025-2028",
+        "arquivo_local": "docs/fontes/documento-area-computacao.pdf",
+        "papel": "algoritmo"
+      },
+      {
+        "titulo": "Fichas de Avaliação Acadêmico e Profissional - Computação, 2025-2028",
+        "arquivo_local": "docs/fontes/ficha-computacao.pdf",
+        "papel": "pesos"
+      },
+      {
+        "titulo": "Anexos da Ficha de Avaliação - Computação",
+        "arquivo_local": "docs/fontes/anexos-computacao.xlsx",
+        "papel": "anexos"
+      }
+    ]
+  },
+
+  "data_extracao": "2026-07-26",
+  "revisor": "PREENCHER",
+
+  "escala": {
+    "rotulos": ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"],
+    "pontos": {
+      "A1": 1,
+      "A2": 0.875,
+      "A3": 0.75,
+      "A4": 0.625,
+      "A5": 0,
+      "A6": 0,
+      "A7": 0,
+      "A8": 0
+    },
+    "formula_producao": "ProdBibliografica_total = #A1 + #A2x0,875 + #A3x0,75 + #A4x0,625 + #L1 + #L2x0,8 + #L3x0,6 + #CL1x0,5 ; ponderado = total/N"
+  },
+
+  "veiculos": {
+
+    "journalArticle": {
+      "combinacao": "metrica_unica",
+      "metrica": "max(wos_percentil, scopus_percentil)",
+      "regras": [
+        { "min": 87.5, "resultado": "A1" },
+        { "min": 75.0, "max": 87.5, "resultado": "A2" },
+        { "min": 62.5, "max": 75.0, "resultado": "A3" },
+        { "min": 50.0, "max": 62.5, "resultado": "A4" },
+        { "min": 37.5, "max": 50.0, "resultado": "A5" },
+        { "min": 25.0, "max": 37.5, "resultado": "A6" },
+        { "min": 12.5, "max": 25.0, "resultado": "A7" },
+        { "min": 0, "max": 12.5, "resultado": "A8" }
+      ],
+      "ajustes": [
+        {
+          "se": "periodico_sbc",
+          "efeito": "+2",
+          "qualitativo": true,
+          "nota": "Periódicos da SBC podem ser elevados em ATÉ dois níveis. O documento diz 'até', ou seja, é decisão da área, não automática. O motor deve apenas SINALIZAR a elegibilidade, nunca aplicar sozinho."
+        }
+      ],
+      "fallback": "NAO_CLASSIFICAVEL"
+    },
+
+    "conferencePaper": {
+      "combinacao": "metrica_unica",
+      "metrica": "h5_google_scholar",
+      "regras": [
+        { "min": 35, "resultado": "A1" },
+        { "min": 25, "max": 35, "resultado": "A2" },
+        { "min": 20, "max": 25, "resultado": "A3" },
+        { "min": 15, "max": 20, "resultado": "A4" },
+        { "min": 12, "max": 15, "resultado": "A5" },
+        { "min": 9, "max": 12, "resultado": "A6" },
+        { "min": 6, "max": 9, "resultado": "A7" },
+        { "min": 1, "max": 6, "resultado": "A8" }
+      ],
+      "ajustes": [
+        { "se": "ce_sbc_top10", "efeito": "+2", "qualitativo": true },
+        { "se": "ce_sbc_top20", "efeito": "+1", "qualitativo": true },
+        { "se": "ce_sbc_relevante", "efeito": "+0", "qualitativo": true,
+          "nota": "Mantém a classificação indicada pelo H5." },
+        { "se": "sem_h5 && ce_sbc_top", "resultado": "A7", "qualitativo": true },
+        { "se": "sem_h5 && ce_sbc_relevante", "resultado": "A8", "qualitativo": true },
+        { "se": "evento_sbc_nacional && anos_tradicao >= 20", "resultado": "A4", "qualitativo": true,
+          "nota": "Critério de indução da área. Vale também para eventos de outras sociedades científicas com aderência à área que respeitem os critérios qualitativos." },
+        { "se": "evento_sbc_nacional && anos_tradicao >= 10", "resultado": "A5", "qualitativo": true }
+      ],
+      "teto_qualitativo": "A3",
+      "fallback": "NAO_CONSIDERADO"
+    },
+
+    "book": {
+      "combinacao": "primeira_regra",
+      "regras": [
+        { "resultado": "NAO_CLASSIFICAVEL",
+          "nota": "Livros são estratificados qualitativamente, caso a caso, segundo o relatório do GT da CAPES sobre classificação de livros. A ficha usa rótulos L1..L3 na fórmula de produção, escala distinta de A1..A8. Não automatizável." }
+      ],
+      "fallback": "NAO_CLASSIFICAVEL"
+    },
+
+    "bookSection": {
+      "combinacao": "primeira_regra",
+      "regras": [
+        { "resultado": "NAO_CLASSIFICAVEL",
+          "nota": "Capítulos usam rótulo CL1 na fórmula (peso 0,5). Estratificação qualitativa caso a caso." }
+      ],
+      "fallback": "NAO_CLASSIFICAVEL"
+    }
+  },
+
+  "nao_automatizavel": [
+    "FWCI (Field-Weighted Citation Impact): os 5% dos artigos com maior FWCI, entre os classificados abaixo de A3, sobem 1 nível. O valor é fornecido pela CAPES e o corte é relativo ao conjunto nacional de artigos selecionados por todos os programas. Impossível de calcular localmente.",
+    "Aderência à Computação: a área não considera artigos sem aderência, ainda que o veículo seja bem classificado.",
+    "Indicadores inflados artificialmente e artigos retratados por más práticas são descartados pela área.",
+    "Periódicos de editoras com más práticas editoriais não são considerados (referência: publicationethics.org).",
+    "Artigos em bases abertas podem receber estrato por análise qualitativa, mediante justificativa do programa.",
+    "Elegibilidade a ajuste qualitativo (SBC, CE-SBC) é sinalizada pelo motor, mas a decisão é da área.",
+    "Livros, capítulos e produção técnica seguem escalas próprias (L1..L3, CL1, T1..T3) com avaliação qualitativa caso a caso."
+  ],
+
+  "notas": [
+    "CORTE PRÁTICO: A5 a A8 têm peso ZERO na fórmula de produção bibliográfica. Na prática, a linha de corte da área é o percentil 50 (A4). Destacar isso na interface.",
+    "A partir de 2025-2028 não existe mais a trava de no máximo 3 artigos em eventos para 1 em periódico.",
+    "[INCERTO] O Documento de Área cita 'Procedimento 2 recomendado pela CAPES' com um '(LINK)' não resolvido no texto extraído. Conferir o hyperlink no PDF original e registrar a URL.",
+    "[INCERTO] O limite inferior do A8 para eventos foi codificado como h5 >= 1, pois o documento diz 'A8: H5 > 0'. Confirmar tratamento de eventos com H5 exatamente 0.",
+    "A lista oficial de siglas de eventos da área (citada no Anexo 3: 'sigla do evento conforme indicado pela área') é a chave canônica de identificação de conferências. URL A LOCALIZAR.",
+    "Anexo 8 (licenças maternidade/parental) existe no xlsx mas não é referenciado no texto da ficha em PDF — documentos possivelmente atualizados em momentos diferentes."
+  ]
+}

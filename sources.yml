@@ -1,0 +1,110 @@
+# sources.yml — Camada 1: Registro global de fontes bibliométricas
+# Cada entrada declara o que a fonte fornece (provides), jamais como é usada nas regras.
+# Regras referenciam MÉTRICAS por nome canônico; a resolução fonte→métrica é feita via este arquivo.
+
+fontes:
+  - id: sjr
+    nome: SCImago Journal Rank
+    landing_url: https://www.scimagojr.com/journalrank.php
+    licenca: livre
+    acquisition: auto
+    provides:
+      - sjr_quartil
+      - sjr_valor
+    status: pendente
+    formato:
+      tipo: csv
+      separador: ";"
+      decimal: ","
+
+  - id: scopus
+    nome: Scopus Source List
+    landing_url: https://www.elsevier.com/products/scopus/content
+    licenca: livre
+    acquisition: auto
+    provides:
+      - scopus_percentil
+      - scopus_quartil
+      - scopus_citescore
+    status: pendente
+    formato:
+      tipo: xlsx
+      aba: 0
+
+  - id: abdc
+    nome: ABDC Journal Quality List
+    landing_url: https://abdc.edu.au/abdc-journal-quality-list/
+    licenca: restrita
+    acquisition: manual
+    provides:
+      - abdc_rating
+    status: pendente
+
+  - id: abs
+    nome: ABS Academic Journal Guide (Chartered ABS)
+    landing_url: https://charteredabs.org/academic-journal-guide/
+    licenca: restrita
+    acquisition: manual
+    provides:
+      - abs_rating
+    status: pendente
+
+  - id: jcr
+    nome: Journal Citation Reports (Clarivate)
+    landing_url: https://jcr.clarivate.com
+    licenca: restrita
+    acquisition: manual
+    provides:
+      - jcr_quartil
+      - jcr_jif
+      - wos_percentil
+    status: pendente
+
+  - id: spell
+    nome: SPELL - Scientific Periodicals Electronic Library
+    landing_url: https://spell.org.br/impacto
+    licenca: livre
+    acquisition: manual
+    provides:
+      - spell_faixa
+      - spell_fator_impacto
+    status: pendente
+    formato:
+      tipo: xls
+
+  - id: scielo
+    nome: SciELO Brasil - Periódicos Correntes
+    landing_url: https://www.scielo.br
+    licenca: livre
+    acquisition: manual
+    provides:
+      - indexado_scielo_br
+    status: pendente
+
+  - id: qualis
+    nome: Qualis Periódicos 2021-2024 (camada histórica)
+    landing_url: https://sucupira.capes.gov.br
+    licenca: livre
+    acquisition: manual
+    provides:
+      - qualis_estrato_historico
+    status: pendente
+    formato:
+      tipo: xlsx
+
+  - id: sbc_eventos
+    nome: Lista de Eventos SBC com H5
+    landing_url: ""
+    licenca: livre
+    acquisition: manual
+    provides:
+      - h5_google_scholar
+      - ce_sbc_top10
+      - ce_sbc_top20
+      - ce_sbc_relevante
+      - ce_sbc_top
+      - evento_sbc_nacional
+      - periodico_sbc
+      - sem_h5
+      - anos_tradicao
+    status: bloqueada

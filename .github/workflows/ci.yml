@@ -1,0 +1,59 @@
+# .github/workflows/ci.yml
+# Integração contínua: valida qualidade do código e enforcement de regras.
+# Requirements: 13.4, 13.7
+
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  validate:
+    name: Validar fronteira de redistribuição
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Instalar dependências
+        run: pip install pyyaml
+
+      - name: Verificar fontes restritas e resolução de métricas
+        run: python scripts/check-restricted-sources.py --ci
+
+  tests:
+    name: Testes do pipeline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repositório
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Instalar dependências do pipeline
+        run: |
+          pip install --upgrade pip
+          pip install -e ./pipeline[dev]
+
+      - name: Executar testes
+        run: pytest pipeline/tests/ -v --tb=short

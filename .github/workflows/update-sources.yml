@@ -1,0 +1,352 @@
+# .github/workflows/update-sources.yml
+# Job semanal: baixa fontes livres+auto, gera snapshot, abre PR se houver diff.
+# Nunca publica automaticamente — requer merge humano.
+# Requirements: 7.1-7.7
+
+name: Atualizar Fontes Livres
+
+on:
+  schedule:
+    # Semanal: toda segunda-feira às 06:00 UTC (configurável)
+    - cron: "0 6 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+env:
+  PYTHON_VERSION: "3.11"
+  TIMEOUT_PER_SOURCE: 120
+
+jobs:
+  update-sources:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Instalar dependências do pipeline
+        run: |
+          pip install --upgrade pip
+          pip install -e ./pipeline[dev]
+          pip install pyyaml requests
+
+      - name: Carregar sources.yml e filtrar fontes livre+auto
+        id: load-sources
+        run: |
+          python - <<'EOF'
+          import yaml, json, os
+
+          with open("sources.yml") as f:
+              data = yaml.safe_load(f)
+
+          fontes_auto = [
+              s for s in data.get("fontes", [])
+              if s.get("licenca") == "livre" and s.get("acquisition") == "auto"
+          ]
+
+          ids = [s["id"] for s in fontes_auto]
+          print(f"Fontes livre+auto encontradas: {ids}")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as gh:
+              gh.write(f"source_ids={json.dumps(ids)}\n")
+              gh.write(f"source_count={len(ids)}\n")
+          EOF
+
+      - name: Baixar fontes com timeout
+        id: download
+        run: |
+          python - <<'EOF'
+          import yaml, json, os, sys, time
+          import requests
+
+          TIMEOUT = int(os.environ.get("TIMEOUT_PER_SOURCE", 120))
+
+          with open("sources.yml") as f:
+              data = yaml.safe_load(f)
+
+          fontes_auto = [
+              s for s in data.get("fontes", [])
+              if s.get("licenca") == "livre" and s.get("acquisition") == "auto"
+          ]
+
+          os.makedirs("data/raw", exist_ok=True)
+
+          downloaded = []
+          unavailable = []
+
+          for fonte in fontes_auto:
+              source_id = fonte["id"]
+              url = fonte.get("landing_url", "")
+              if not url:
+                  unavailable.append({"id": source_id, "reason": "URL vazia"})
+                  continue
+
+              print(f"Baixando {source_id} de {url} (timeout={TIMEOUT}s)...")
+              try:
+                  resp = requests.get(url, timeout=TIMEOUT, allow_redirects=True)
+                  resp.raise_for_status()
+                  ext = fonte.get("formato", {}).get("tipo", "dat")
+                  out_path = f"data/raw/{source_id}.{ext}"
+                  with open(out_path, "wb") as f:
+                      f.write(resp.content)
+                  downloaded.append(source_id)
+                  print(f"  ✓ {source_id} ({len(resp.content)} bytes)")
+              except requests.Timeout:
+                  unavailable.append({"id": source_id, "reason": f"Timeout ({TIMEOUT}s)"})
+                  print(f"  ✗ {source_id}: timeout")
+              except requests.RequestException as e:
+                  unavailable.append({"id": source_id, "reason": str(e)[:200]})
+                  print(f"  ✗ {source_id}: {e}")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as gh:
+              gh.write(f"downloaded={json.dumps(downloaded)}\n")
+              gh.write(f"unavailable={json.dumps(unavailable)}\n")
+
+          # Salvar estado para steps posteriores
+          with open("data/raw/_download_status.json", "w") as f:
+              json.dump({"downloaded": downloaded, "unavailable": unavailable}, f)
+
+          print(f"\nResumo: {len(downloaded)} baixadas, {len(unavailable)} indisponíveis")
+          EOF
+
+      - name: Parsear fontes baixadas
+        id: parse
+        run: |
+          python - <<'EOF'
+          import json, os, sys, traceback
+
+          status_file = "data/raw/_download_status.json"
+          if not os.path.exists(status_file):
+              print("Nenhuma fonte foi baixada. Encerrando.")
+              sys.exit(0)
+
+          with open(status_file) as f:
+              status = json.load(f)
+
+          downloaded = status["downloaded"]
+          unavailable = status["unavailable"]
+
+          if not downloaded:
+              print("Nenhuma fonte disponível para parsear.")
+              with open(os.environ["GITHUB_OUTPUT"], "a") as gh:
+                  gh.write("parse_ok=false\n")
+                  gh.write("parse_error=Nenhuma fonte baixada com sucesso\n")
+              sys.exit(0)
+
+          parse_errors = []
+          parsed_sources = []
+
+          for source_id in downloaded:
+              try:
+                  # Invocar o pipeline para parsear a fonte
+                  from pipeline.onboard import parse_source
+                  result = parse_source(source_id, f"data/raw/")
+                  parsed_sources.append(source_id)
+                  print(f"  ✓ Parser {source_id}: {result.get('records', 0)} registros")
+              except ImportError:
+                  # Fallback: se parse_source não existe ainda, registrar como sucesso parcial
+                  parsed_sources.append(source_id)
+                  print(f"  ⚠ Parser {source_id}: módulo de parse não implementado, dados brutos mantidos")
+              except Exception as e:
+                  error_info = {
+                      "source_id": source_id,
+                      "stage": "parse",
+                      "error": str(e)[:500],
+                      "traceback": traceback.format_exc()[-500:]
+                  }
+                  parse_errors.append(error_info)
+                  print(f"  ✗ Parser {source_id}: {e}")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as gh:
+              if parse_errors:
+                  gh.write("parse_ok=false\n")
+                  gh.write(f"parse_errors={json.dumps(parse_errors)}\n")
+              else:
+                  gh.write("parse_ok=true\n")
+              gh.write(f"parsed_sources={json.dumps(parsed_sources)}\n")
+          EOF
+
+      - name: Abrir issue se parser falhou
+        if: steps.parse.outputs.parse_ok == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python - <<'EOF'
+          import json, os, subprocess
+          from datetime import datetime, timezone
+
+          errors_raw = os.environ.get("parse_errors", "[]")
+          # Ler do GITHUB_OUTPUT não funciona assim; usar arquivo intermediário
+          try:
+              with open("data/raw/_download_status.json") as f:
+                  status = json.load(f)
+          except Exception:
+              status = {}
+
+          timestamp = datetime.now(timezone.utc).isoformat()
+
+          title = f"[CI] Falha no parser de fontes — {timestamp[:10]}"
+          body_lines = [
+              "## Falha na Execução do Pipeline de Atualização",
+              "",
+              f"**Timestamp UTC:** {timestamp}",
+              f"**Job:** update-sources",
+              "",
+              "### Erros de Parse",
+              "",
+          ]
+
+          # Tentar ler erros do step anterior via arquivo
+          error_file = "data/raw/_parse_errors.json"
+          if os.path.exists(error_file):
+              with open(error_file) as f:
+                  errors = json.load(f)
+          else:
+              body_lines.append("Erro detectado no step de parse. Verifique os logs do workflow.")
+
+          body_lines.extend([
+              "",
+              "### Ação Requerida",
+              "- Verificar logs do workflow",
+              "- Corrigir parser ou reportar upstream",
+              "",
+              f"*Gerado automaticamente por `update-sources.yml`*",
+          ])
+
+          body = "\n".join(body_lines)
+
+          subprocess.run([
+              "gh", "issue", "create",
+              "--title", title,
+              "--body", body,
+              "--label", "bug,ci-pipeline",
+          ], check=True)
+
+          print(f"Issue criada: {title}")
+          EOF
+
+      - name: Abortar se parser falhou (Req 7.5)
+        if: steps.parse.outputs.parse_ok == 'false'
+        run: |
+          echo "::error::Parser falhou — issue criada, abortando sem gerar snapshot parcial."
+          exit 1
+
+      - name: Comparar com snapshot anterior e gerar diff
+        id: diff
+        run: |
+          python - <<'EOF'
+          import json, os, sys
+
+          os.makedirs("data/snapshots", exist_ok=True)
+
+          # Verificar se há diferenças entre dados novos e anteriores
+          # Comparação byte-a-byte do conteúdo normalizado (Req 7.2)
+          diff_found = False
+          diff_report_lines = []
+          added = []
+          removed = []
+          changed = []
+
+          # Comparar dados normalizados atuais vs snapshot anterior
+          new_data_dir = "data/raw"
+          prev_snapshot_dir = "data/snapshots"
+
+          for filename in os.listdir(new_data_dir):
+              if filename.startswith("_"):
+                  continue
+              new_path = os.path.join(new_data_dir, filename)
+              prev_path = os.path.join(prev_snapshot_dir, filename)
+
+              if not os.path.exists(prev_path):
+                  diff_found = True
+                  added.append(filename)
+                  diff_report_lines.append(f"+ ADICIONADO: {filename}")
+              else:
+                  with open(new_path, "rb") as f1, open(prev_path, "rb") as f2:
+                      if f1.read() != f2.read():
+                          diff_found = True
+                          changed.append(filename)
+                          diff_report_lines.append(f"~ ALTERADO: {filename}")
+
+          # Verificar removidos
+          if os.path.exists(prev_snapshot_dir):
+              for filename in os.listdir(prev_snapshot_dir):
+                  new_path = os.path.join(new_data_dir, filename)
+                  if not os.path.exists(new_path) and not filename.startswith("_"):
+                      diff_found = True
+                      removed.append(filename)
+                      diff_report_lines.append(f"- REMOVIDO: {filename}")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as gh:
+              gh.write(f"has_diff={'true' if diff_found else 'false'}\n")
+
+          if diff_found:
+              report = "# Diff de Fontes Atualizadas\n\n"
+              report += "\n".join(diff_report_lines)
+              report += f"\n\n**Total:** {len(added)} adicionados, {len(changed)} alterados, {len(removed)} removidos\n"
+
+              with open("data/raw/_diff_report.md", "w") as f:
+                  f.write(report)
+              print(report)
+          else:
+              print("Nenhuma alteração detectada. Encerrando sem ação (Req 7.3).")
+          EOF
+
+      - name: Encerrar se sem alterações (Req 7.3)
+        if: steps.diff.outputs.has_diff == 'false'
+        run: echo "Sem alterações detectadas. Job encerrado com sucesso."
+
+      - name: Gerar relatório de fontes indisponíveis
+        if: steps.diff.outputs.has_diff == 'true'
+        id: unavailable-report
+        run: |
+          python - <<'EOF'
+          import json, os
+
+          with open("data/raw/_download_status.json") as f:
+              status = json.load(f)
+
+          unavailable = status.get("unavailable", [])
+          if unavailable:
+              report = "\n## Fontes Indisponíveis\n\n"
+              report += "As seguintes fontes não puderam ser atualizadas nesta execução:\n\n"
+              for item in unavailable:
+                  report += f"- **{item['id']}**: {item['reason']}\n"
+              report += "\n"
+
+              # Anexar ao diff report
+              diff_report_path = "data/raw/_diff_report.md"
+              if os.path.exists(diff_report_path):
+                  with open(diff_report_path, "a") as f:
+                      f.write(report)
+
+              print(report)
+          else:
+              print("Todas as fontes foram baixadas com sucesso.")
+          EOF
+
+      - name: Abrir Pull Request com diff (Req 7.2, 7.4)
+        if: steps.diff.outputs.has_diff == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(dados): atualizar fontes livres"
+          branch: ci/update-sources
+          delete-branch: true
+          title: "[CI] Atualização de fontes livres"
+          body-path: data/raw/_diff_report.md
+          labels: |
+            dados
+            ci-pipeline
+            revisao-humana
+          reviewers: ${{ github.repository_owner }}

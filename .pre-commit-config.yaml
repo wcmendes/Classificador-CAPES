@@ -1,0 +1,24 @@
+# .pre-commit-config.yaml
+# Hooks de qualidade executados antes de cada commit.
+#
+# Instalação:
+#   pip install pre-commit
+#   pre-commit install
+#
+# Execução manual:
+#   pre-commit run --all-files
+
+repos:
+  - repo: local
+    hooks:
+      - id: check-restricted-sources
+        name: Verificar fontes restritas e resolução de métricas
+        language: python
+        entry: python scripts/check-restricted-sources.py
+        always_run: true
+        pass_filenames: false
+        additional_dependencies: ["pyyaml"]
+        description: >
+          Garante que dados de fontes com licenca=restrita não estejam rastreados
+          no git, e que toda métrica em areas/*.json seja resolvível via sources.yml.
+          (Requirements: 13.4, 13.7)

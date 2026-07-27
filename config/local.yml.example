@@ -1,0 +1,21 @@
+# config/local.yml — Template de configuração local
+# Copie este arquivo para config/local.yml e preencha com seus caminhos.
+# NUNCA versione config/local.yml — ele está no .gitignore.
+#
+# Este arquivo contém apenas:
+#   - Caminhos de arquivos de fontes restritas
+#   - Credenciais de APIs (opcional)
+# NÃO permite redefinição de métricas ou regras de classificação.
+
+fontes:
+  abdc:
+    caminho: ~/Downloads/ABDC-JQL-2025-v1-260326.xlsx
+  abs:
+    caminho: ~/Downloads/abs-ajg-2024.xlsx
+  jcr:
+    caminho: ~/Downloads/jcr-2025.csv
+
+# Credenciais opcionais para APIs de enriquecimento
+apis:
+  crossref:
+    mailto: seu-email@universidade.edu.br

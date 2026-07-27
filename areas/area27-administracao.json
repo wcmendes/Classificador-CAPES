@@ -1,0 +1,90 @@
+{
+  "$schema": "../schema/area.schema.json",
+
+  "area": 27,
+  "nome": "Administração Pública e de Empresas, Ciências Contábeis e Turismo",
+  "vigencia": "2025-2028",
+  "procedimento": [1],
+  "status": "experimental",
+
+  "fonte_oficial": {
+    "landing_url": "https://www.gov.br/capes/pt-br/acesso-a-informacao/acoes-e-programas/avaliacao/sobre-a-avaliacao/areas-avaliacao/sobre-as-areas-de-avaliacao/colegio-de-humanidades/ciencias-sociais-aplicadas",
+    "documentos": [
+      {
+        "titulo": "Ficha de Avaliação Área 27, Quadriênio 2025-2028 (divulgada em 23/05/2025)",
+        "url": "https://www.gov.br/capes/pt-br/acesso-a-informacao/acoes-e-programas/avaliacao/sobre-a-avaliacao/areas-avaliacao/sobre-as-areas-de-avaliacao/colegio-de-humanidades/ciencias-sociais-aplicadas/23_05_ADM_FICHA_2025_2028.pdf",
+        "arquivo_local": "docs/fontes/ficha-area27.pdf",
+        "papel": "algoritmo"
+      }
+    ]
+  },
+
+  "data_extracao": "2026-07-26",
+  "revisor": "PREENCHER",
+
+  "escala": {
+    "rotulos": ["MB", "B", "R", "F", "I"],
+    "pontos": { "MB": 8, "B": 4, "R": 2, "F": 1, "I": 0 },
+    "formula_producao": "Equivalencias de pontos: MB=8, B=4, R=2, F=1"
+  },
+
+  "veiculos": {
+
+    "journalArticle": {
+      "combinacao": "melhor_posicao",
+
+      "regras": [
+        { "metrica": "abdc_rating",  "in": ["A", "A*"], "resultado": "MB" },
+        { "metrica": "abs_rating",   "min": 2,          "resultado": "MB" },
+        { "metrica": "jcr_quartil",  "in": ["Q1"],      "resultado": "MB" },
+        { "metrica": "sjr_quartil",  "in": ["Q1"],      "resultado": "MB" },
+
+        { "metrica": "abdc_rating",  "in": ["B"],       "resultado": "B" },
+        { "metrica": "abs_rating",   "min": 1, "max": 2, "resultado": "B" },
+        { "metrica": "jcr_quartil",  "in": ["Q2"],      "resultado": "B" },
+        { "metrica": "sjr_quartil",  "in": ["Q2"],      "resultado": "B" },
+        {
+          "metrica": "spell_faixa",
+          "in": ["decil_superior"],
+          "requer": ["indexado_scielo_br"],
+          "resultado": "B",
+          "nota": "Para chegar a B via SPELL o periódico precisa estar no décil superior E no SciELO Brasil. As duas condições são cumulativas."
+        },
+
+        { "metrica": "abdc_rating",  "in": ["C"],       "resultado": "R" },
+        { "metrica": "jcr_quartil",  "in": ["Q3"],      "resultado": "R" },
+        { "metrica": "sjr_quartil",  "in": ["Q3"],      "resultado": "R" },
+        { "metrica": "spell_faixa",  "in": ["10_a_40"], "resultado": "R",
+          "nota": "[INCERTO] Ver notas." },
+
+        { "metrica": "jcr_quartil",  "in": ["Q4"],      "resultado": "F" },
+        { "metrica": "sjr_quartil",  "in": ["Q4"],      "resultado": "F" },
+        { "metrica": "spell_faixa",  "in": ["40_a_70"], "resultado": "F",
+          "nota": "[INCERTO] Ver notas." }
+      ],
+
+      "ajustes": [
+        {
+          "se": "indexado_scielo_br",
+          "efeito": "+1",
+          "teto": "B",
+          "nota": "A presença do periódico no SciELO Brasil gera ajuste de um nível para cima, limitado ao conceito B."
+        }
+      ],
+
+      "fallback": "NAO_CLASSIFICAVEL"
+    }
+  },
+
+  "nao_automatizavel": [
+    "Aderência: a produção intelectual deve estar alinhada à área de concentração e à linha de pesquisa do PPG. Produções não aderentes são desconsideradas pela CAPES nos indicadores de avaliação, independentemente do estrato do veículo."
+  ],
+
+  "notas": [
+    "COMBINAÇÃO GENEROSA: vale a MELHOR posição do periódico entre todas as listas/bases. Basta estar bem em uma delas.",
+    "[INCERTO] O Quadro 1 da ficha, conforme transcrito publicamente, lista 'SPELL: 30% seguintes' tanto na linha R quanto na linha F, o que é ambíguo. As faixas codificadas aqui (10-40% para R, 40-70% para F) foram inferidas dos filtros do site periodicos-adm.com, que NÃO é fonte oficial. CONFERIR NA FICHA antes de mudar o status para 'validada'.",
+    "[INCERTO] O rótulo I (Insuficiente) aparece nos filtros do periodicos-adm.com mas não no Quadro 1 transcrito. Confirmar se a ficha define I explicitamente ou se é apenas a ausência de classificação.",
+    "[INCERTO] A ficha menciona 'metodologia nível 3'. Não foi possível casar essa numeração com os Procedimentos 1/2/3 do Documento Referencial. Verificar a seção Metodologia de Avaliação do Documento Referencial e corrigir o campo 'procedimento' se necessário.",
+    "A área não define regras para conferencePaper, book ou bookSection neste arquivo. Itens desses tipos devem retornar NAO_CLASSIFICAVEL, nunca um estrato aproximado."
+  ]
+}

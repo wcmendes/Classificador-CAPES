@@ -1,0 +1,42 @@
+# === Configuração local (fontes restritas e credenciais) ===
+config/local.yml
+
+# === Python ===
+*.pyc
+__pycache__/
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.hypothesis/
+*.egg
+
+# === Ambientes virtuais ===
+.venv/
+venv/
+env/
+
+# === Dados de fontes restritas ===
+# Fontes com licenca: restrita em sources.yml não podem ser versionadas.
+# Os arquivos originais ficam apenas no config/local.yml do mantenedor.
+data/restricted/
+
+# === Amostras de fontes (geradas por make_sample.py) ===
+# Amostras CSV são geradas localmente e não devem ser versionadas.
+# Os schemas (_schema.md) SÃO versionados para documentar a estrutura.
+docs/fontes/*_sample.csv
+
+# === IDE e OS ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# === Node / Plugin Zotero ===
+node_modules/
+plugin/dist/

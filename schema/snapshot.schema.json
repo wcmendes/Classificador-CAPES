@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/classificador-capes/schema/snapshot.schema.json",
+  "title": "Snapshot de classificação por Área de Avaliação CAPES",
+  "description": "Artefato imutável gerado pelo pipeline, contendo vereditos pré-calculados para todos os veículos de uma área em uma data específica. Contrato pipeline → plugin.",
+  "type": "object",
+  "required": [
+    "area",
+    "nome",
+    "vigencia",
+    "status",
+    "escala",
+    "data_snapshot",
+    "fontes_utilizadas",
+    "nao_automatizavel",
+    "veiculos"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Referência ao schema para validação (opcional no JSON, mas recomendado)."
+    },
+    "area": {
+      "type": "integer",
+      "description": "Código numérico da Área de Avaliação CAPES.",
+      "minimum": 1
+    },
+    "nome": {
+      "type": "string",
+      "description": "Nome legível da área."
+    },
+    "vigencia": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{4}$",
+      "description": "Quadriênio de vigência (ex: 2025-2028)."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "validada",
+        "experimental",
+        "nao_automatizavel"
+      ],
+      "description": "validada = conferida contra ficha oficial; experimental = derivada mas não conferida; nao_automatizavel = exige julgamento humano."
+    },
+    "escala": {
+      "type": "object",
+      "required": [
+        "rotulos"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "rotulos": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "description": "Rótulos da escala do melhor para o pior."
+        },
+        "pontos": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Peso de cada rótulo no cálculo de produção."
+        }
+      }
+    },
+    "data_snapshot": {
+      "type": "string",
+      "format": "date",
+      "description": "Data de geração do snapshot (ISO 8601: AAAA-MM-DD)."
+    },
+    "fontes_utilizadas": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/fonteUtilizada"
+      },
+      "description": "Fontes que alimentaram este snapshot. Pode ser array vazio se zero fontes carregadas."
+    },
+    "nao_automatizavel": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Critérios da ficha que o motor não reproduz. Exibidos ao usuário."
+    },
+    "veiculos": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/veiculo"
+      },
+      "description": "Mapa ISSN-L → vereditos pré-calculados. Pode ser objeto vazio {} quando zero fontes carregadas."
+    }
+  },
+  "$defs": {
+    "fonteUtilizada": {
+      "type": "object",
+      "required": [
+        "id",
+        "data_arquivo",
+        "registros"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Identificador da fonte conforme sources.yml."
+        },
+        "data_arquivo": {
+          "type": "string",
+          "format": "date",
+          "description": "Data do arquivo da fonte (ISO 8601)."
+        },
+        "registros": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Quantidade de registros processados da fonte."
+        }
+      }
+    },
+    "veiculo": {
+      "type": "object",
+      "required": [
+        "titulo",
+        "issns",
+        "tipos"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "titulo": {
+          "type": "string",
+          "description": "Título principal do veículo."
+        },
+        "issns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{3}[0-9X]$"
+          },
+          "minItems": 1,
+          "description": "Todos os ISSNs conhecidos para este veículo."
+        },
+        "tipos": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/tipoVeredito"
+          },
+          "description": "Mapa tipo de item → veredito pré-calculado."
+        }
+      }
+    },
+    "tipoVeredito": {
+      "type": "object",
+      "required": [
+        "estrato",
+        "estado",
+        "trilha",
+        "metricas_utilizadas",
+        "metricas_ausentes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "estrato": {
+          "type": "string",
+          "description": "Rótulo final na escala da área (ex: A1, MB, NAO_CLASSIFICAVEL)."
+        },
+        "estado": {
+          "type": "string",
+          "enum": [
+            "COMPLETO",
+            "ESTIMATIVA_CONSERVADORA",
+            "NAO_CLASSIFICAVEL",
+            "NAO_CONSIDERADO"
+          ],
+          "description": "COMPLETO = todos operandos presentes; ESTIMATIVA_CONSERVADORA = parcial; NAO_CLASSIFICAVEL = sem dados; NAO_CONSIDERADO = tipo descartado pela área."
+        },
+        "trilha": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entradaTrilha"
+          },
+          "description": "Trilha de decisão completa — cada etapa registra o raciocínio do motor."
+        },
+        "metricas_utilizadas": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/metricaUtilizada"
+          },
+          "description": "Métricas consumidas com proveniência."
+        },
+        "metricas_ausentes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Nomes canônicos de métricas que não estavam disponíveis."
+        }
+      }
+    },
+    "entradaTrilha": {
+      "type": "object",
+      "required": [
+        "etapa"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "etapa": {
+          "type": "string",
+          "description": "Tipo da etapa (ex: expressao_avaliada, regra_ativada, ajuste_sinalizado)."
+        }
+      },
+      "description": "Entrada flexível na trilha de decisão. Campos variam conforme o tipo de etapa."
+    },
+    "metricaUtilizada": {
+      "type": "object",
+      "required": [
+        "valor",
+        "fonte",
+        "data"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "valor": {
+          "description": "Valor da métrica.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fonte": {
+          "type": "string",
+          "description": "Identificador da fonte que forneceu o valor."
+        },
+        "data": {
+          "type": "string",
+          "format": "date",
+          "description": "Data do arquivo da fonte (ISO 8601)."
+        }
+      }
+    }
+  }
+}
