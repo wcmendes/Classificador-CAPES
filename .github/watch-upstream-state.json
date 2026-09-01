@@ -1,0 +1,85 @@
+{
+  "fonte:sjr": {
+    "consecutive_failures": 1,
+    "last_error": "403 Client Error: Forbidden for url: https://www.scimagojr.com/journalrank.php",
+    "last_error_at": "2026-09-01T12:15:01.767132+00:00"
+  },
+  "fonte:scopus": {
+    "etag": null,
+    "last_modified": null,
+    "status_code": 200,
+    "checked_at": "2026-09-01T12:15:01.767132+00:00",
+    "consecutive_failures": 0
+  },
+  "fonte:abdc": {
+    "etag": null,
+    "last_modified": null,
+    "status_code": 200,
+    "checked_at": "2026-09-01T12:15:01.767132+00:00",
+    "consecutive_failures": 0
+  },
+  "fonte:abs": {
+    "consecutive_failures": 1,
+    "last_error": "403 Client Error: Forbidden for url: https://charteredabs.org/academic-journal-guide/",
+    "last_error_at": "2026-09-01T12:15:01.767132+00:00"
+  },
+  "fonte:jcr": {
+    "etag": null,
+    "last_modified": null,
+    "status_code": 200,
+    "checked_at": "2026-09-01T12:15:01.767132+00:00",
+    "consecutive_failures": 0
+  },
+  "fonte:spell": {
+    "consecutive_failures": 1,
+    "last_error": "Exceeded 30 redirects.",
+    "last_error_at": "2026-09-01T12:15:01.767132+00:00"
+  },
+  "fonte:scielo": {
+    "etag": null,
+    "last_modified": null,
+    "status_code": 200,
+    "checked_at": "2026-09-01T12:15:01.767132+00:00",
+    "consecutive_failures": 0
+  },
+  "fonte:qualis": {
+    "etag": null,
+    "last_modified": null,
+    "status_code": 200,
+    "checked_at": "2026-09-01T12:15:01.767132+00:00",
+    "consecutive_failures": 0
+  },
+  "fonte:sbc_eventos": {
+    "consecutive_failures": 1,
+    "last_error": "URL vazia",
+    "last_error_at": "2026-09-01T12:15:01.767132+00:00"
+  },
+  "normativo:doc-area27-algoritmo": {
+    "etag": "W/\"4e3ee-bKxkCjddxlgBTWRyfUmqpVvYKkk:dtagent10343260715123811Gh+C\"",
+    "last_modified": null,
+    "status_code": 200,
+    "checked_at": "2026-09-01T12:15:01.767132+00:00",
+    "consecutive_failures": 0
+  },
+  "normativo:doc-area02-algoritmo": {
+    "etag": "W/\"5891e-nUVVPrxNO6QbSZCLVaIWkzmpx5w:dtagent10343260715123811Gh+C\"",
+    "last_modified": null,
+    "status_code": 200,
+    "checked_at": "2026-09-01T12:15:01.767132+00:00",
+    "consecutive_failures": 0
+  },
+  "normativo:doc-area02-pesos": {
+    "etag": "W/\"5891e-t6sXzOAK9Mvb1wDn4H3lQNFyysE:dtagent10343260715123811Gh+C\"",
+    "last_modified": null,
+    "status_code": 200,
+    "checked_at": "2026-09-01T12:15:01.767132+00:00",
+    "consecutive_failures": 0
+  },
+  "normativo:doc-area02-anexos": {
+    "etag": "W/\"5891e-ylkxInRJonepdsdxCH3XmUj5SDE:dtagent10343260715123811Gh+C\"",
+    "last_modified": null,
+    "status_code": 200,
+    "checked_at": "2026-09-01T12:15:01.767132+00:00",
+    "consecutive_failures": 0
+  }
+}
